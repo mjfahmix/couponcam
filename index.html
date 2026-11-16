@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#081522">
+  <title>CouponCam | Drive the Dream</title>
+  <style>
+    :root {color-scheme:dark;--bg:#081522;--surface:#132438;--surface2:#1b334b;--text:#f5f8fe;--muted:#aec0d0;--gold:#ffd162;--green:#9be5bb;--pink:#ffb1a4}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+    .app{max-width:720px;margin:auto;padding:16px 15px 32px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 13px}
+    h1{margin:0;font-size:1.47rem;letter-spacing:-.4px}h1 em{font-style:normal;color:var(--gold)}
+    .sub{font-size:.82rem;color:var(--muted)}.counter{font-weight:800;font-size:1.45rem;white-space:nowrap;color:var(--gold)}
+    .camera{position:relative;border-radius:18px;overflow:hidden;background:#121923;min-height:220px;aspect-ratio:3 / 3.2;border:1px solid #29465d;max-height:53vh}
+    video{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+    .idle{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:22px;color:var(--muted)}
+    .guide{position:absolute;left:7%;width:86%;top:42%;height:16%;min-height:62px;border:3px solid var(--gold);border-radius:13px;box-shadow:0 0 0 200vmax #0004,0 0 28px #ffd16233;pointer-events:none}
+    .guide:after{content:'CENTER RED COUPON NUMBER HERE';position:absolute;top:-30px;left:0;right:0;text-align:center;color:white;font-weight:750;font-size:11px;letter-spacing:.7px;text-shadow:0 2px 3px #000}
+    .flash{position:absolute;inset:0;background:#7ce9a7aa;opacity:0;pointer-events:none;transition:opacity .22s}.flash.active{opacity:1}
+    .status{margin:11px 0 13px;background:var(--surface);padding:11px 12px;border:1px solid #29465d;border-radius:12px;min-height:48px;font-size:.9rem}
+    .status.ok{border-color:#337d57;color:var(--green)}.status.warn{border-color:#8b6052;color:var(--pink)}
+    .actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:12px 0}
+    button{border:1px solid #365673;border-radius:11px;min-height:47px;padding:11px 13px;background:#1b344b;color:white;font:inherit;font-weight:700;cursor:pointer}
+    button:active{transform:translateY(1px)}button:disabled{opacity:.43;cursor:default}
+    button.primary{background:var(--gold);color:#1d2733;border-color:var(--gold)}button.stop{background:#4f272a;border-color:#8b4b4b}
+    .lower{display:flex;gap:9px;align-items:stretch;flex-wrap:wrap}.lower button{flex:1}
+    section{margin-top:16px;background:var(--surface);padding:13px;border:1px solid #2b4258;border-radius:15px}
+    section h2{font-size:1rem;margin:0 0 10px}
+    .manual{display:flex;gap:8px}.manual input{min-width:0;flex:1;padding:11px 12px;border:1px solid #43607b;background:#091a2b;color:white;border-radius:10px;font:600 1.2rem/1.3 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:1px}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{padding:10px;background:#0c1d2d;border-radius:10px;text-align:center}.stat strong{display:block;color:var(--gold);font-size:1.18rem}.stat span{font-size:.75rem;color:var(--muted)}
+    .listhead{display:flex;align-items:center;justify-content:space-between;gap:10px}.listhead small{color:var(--muted)}
+    .items{max-height:280px;overflow:auto}.item{border-top:1px solid #284359;padding:8px 1px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .item small{color:var(--muted);font-size:.75rem}.item .digits{letter-spacing:.7px;font-size:1.07rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+    .item button{min-height:28px;padding:4px 9px;font-weight:600;font-size:.8rem;background:transparent}
+    .tip{color:var(--muted);font-size:.81rem;margin:9px 1px}.filelink{display:inline-block;cursor:pointer;text-align:center;border:1px solid #365673;border-radius:11px;min-height:47px;padding:10px 11px;background:#1b344b;font-weight:700;flex:1}
+    #photoFile{display:none}.hide{display:none!important}footer{text-align:center;color:var(--muted);font-size:.75rem;margin-top:14px}
+    @media(min-width:650px){.camera{aspect-ratio:4 / 3;max-height:450px}.app{padding-top:23px}}
+  </style>
+  <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<main class="app">
+  <header>
+    <div><h1>Coupon<em>Cam</em></h1><div class="sub">Drive the Dream · Abu Sidra Mall</div></div>
+    <div style="text-align:right"><div class="counter" id="total">0</div><div class="sub">unique coupons</div></div>
+  </header>
+  <div class="camera" id="cameraBox">
+    <video id="view" autoplay muted playsinline></video>
+    <div class="idle" id="idle">Tap <strong style="margin:0 5px;color:white">Open camera</strong> to begin scanning.</div>
+    <div class="guide" id="guide" style="display:none"></div>
+    <div class="flash" id="flash"></div>
+  </div>
+  <div id="status" class="status" role="status">Ready. Import the existing 85 coupon numbers once, then start scanning.</div>
+  <div class="actions">
+    <button id="cameraBtn" class="primary">Open camera</button>
+    <button id="autoBtn" disabled>Start auto scan</button>
+    <button id="snapBtn" disabled>Read number now</button>
+    <button id="flipBtn" disabled>Flip camera</button>
+  </div>
+  <div class="lower">
+    <label for="photoFile" class="filelink">Use photo instead</label><input type="file" id="photoFile" accept="image/*" capture="environment">
+    <button id="exportBtn" class="primary">Export Excel</button>
+  </div>
+  <div class="tip">Keep the 7-digit red number inside the yellow frame. Auto scan adds new numbers without taking or uploading photos. Use a well-lit spot and hold steady.</div>
+  <section>
+    <h2>Import earlier coupons</h2>
+    <div class="lower"><label for="baselineFile" class="filelink">Import the 85-number list</label><input type="file" id="baselineFile" accept=".txt,.csv,text/plain,text/csv" style="display:none"></div>
+    <div class="tip">Use <strong>existing_coupons.txt</strong> from your download. Keep that file private; the public scanner page has no coupon numbers in its code.</div>
+  </section>
+  <section>
+    <h2>Manual correction</h2>
+    <div class="manual"><input id="manualInput" inputmode="numeric" pattern="[0-9]*" maxlength="7" placeholder="0012345" autocomplete="off" aria-label="Seven digit coupon number"><button id="manualBtn" class="primary">Add</button></div>
+  </section>
+  <section>
+    <div class="stats">
+      <div class="stat"><strong id="previousCount">0</strong><span>Already collected</span></div>
+      <div class="stat"><strong id="newCount">0</strong><span>New scans</span></div>
+      <div class="stat"><strong id="dupeCount">0</strong><span>Duplicate reads</span></div>
+    </div>
+  </section>
+  <section>
+    <div class="listhead"><h2>Most recent coupons</h2><small id="listCount"></small></div>
+    <div id="couponList" class="items"></div>
+    <div class="lower" style="margin-top:12px"><button id="copyBtn">Copy numbers</button><button id="csvBtn">Export CSV</button></div>
+  </section>
+  <footer>Numbers are stored on this device in this browser. OCR runs on your device. Keep an Excel backup regularly.</footer>
+</main>
+<script>
+(()=>{'use strict';
+const INITIAL_CODES=[];
+const STORAGE_KEY='couponcam_abu_sidra_20261116_v1';
+const CAMPAIGN='Abu Sidra Mall - Drive the Dream';
+const $=id=>document.getElementById(id);
+const now=()=>new Date().toISOString();
+const startEntries=INITIAL_CODES.map(code=>({code,source:'Previous ChatGPT batch',addedAt:''}));
+let records=[],duplicateReads=0,stream=null,worker=null,workerPromise=null,auto=false,scanTimeout=null,busy=false,facing='environment',lastSeen='',lastSeenAt=0;
+function load(){let saved;try{saved=JSON.parse(localStorage.getItem(STORAGE_KEY))}catch{};
+  const originals=Array.isArray(saved)?saved.filter(x=>x&&/^\d{7}$/.test(x.code)):[];
+  const seen=new Set;records=[];
+  for(const r of [...originals,...startEntries])if(!seen.has(r.code)){seen.add(r.code);records.push(r)}
+  save();render();}
+function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(records))}catch(e){setStatus('Device storage unavailable. Export Excel before closing this page.',true)}}
+function setStatus(msg,kind=''){const s=$('status');s.textContent=msg;s.className='status '+(kind===true?'warn':kind||'')}
+function render(){const newer=records.filter(x=>x.source!=='Previous ChatGPT batch');
+  $('total').textContent=records.length;$('previousCount').textContent=records.length-newer.length;$('newCount').textContent=newer.length;$('dupeCount').textContent=duplicateReads;
+  $('listCount').textContent=`${records.length} saved`;
+  const container=$('couponList');container.textContent='';
+  for(const r of [...records].reverse().slice(0,24)){
+    const row=document.createElement('div');row.className='item';const left=document.createElement('div');
+    const code=document.createElement('div');code.className='digits';code.textContent=r.code;left.appendChild(code);
+    const small=document.createElement('small');small.textContent=r.source==='Previous ChatGPT batch'?'Already collected':`${r.source} · ${r.addedAt?new Date(r.addedAt).toLocaleTimeString():''}`;left.appendChild(small);
+    const remove=document.createElement('button');remove.textContent='Remove';remove.setAttribute('aria-label','Remove coupon '+r.code);
+    remove.addEventListener('click',()=>{if(!confirm(`Remove ${r.code}?`))return;records=records.filter(x=>x.code!==r.code);save();render();setStatus(`${r.code} removed`)});
+    row.appendChild(left);row.appendChild(remove);container.appendChild(row)
+  }
+}
+function beep(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const a=new C(),o=a.createOscillator(),g=a.createGain();o.frequency.value=880;o.type='sine';g.gain.value=.045;o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+.11);o.onended=()=>a.close()}catch{}}
+function add(code,source='Auto scan'){
+ if(!/^00\d{5}$/.test(code)){setStatus('Expected a seven-digit coupon beginning with 00. Use manual correction if needed.','warn');return false}
+ if(records.some(r=>r.code===code)){
+   const time=Date.now();if(lastSeen!==code||time-lastSeenAt>5000){duplicateReads++;setStatus(`${code} already exists — not added again.`,'warn');render()}
+   lastSeen=code;lastSeenAt=time;return false;
+ }
+ records.push({code,source,addedAt:now()});save();render();setStatus(`✓ ${code} added! ${records.length} unique coupons.`,'ok');lastSeen=code;lastSeenAt=Date.now();
+ $('flash').classList.add('active');setTimeout(()=>$('flash').classList.remove('active'),220);beep();return true;
+}
+function extractCode(text){
+ const lines=(text||'').split(/[\n\r]+/).map(v=>v.replace(/[^0-9]/g,''));
+ for(const s of lines){if(/^00\d{5}$/.test(s))return s;const matches=s.match(/00\d{5}/g);if(matches?.length===1)return matches[0]}
+ const all=lines.join('');const matches=all.match(/00\d{5}/g);return matches?.length===1?matches[0]:null;
+}
+async function prepareWorker(){if(worker)return worker;if(workerPromise)return workerPromise;
+ workerPromise=(async()=>{
+   if(!window.Tesseract)throw new Error('OCR library could not load. Connect to the internet and reload.');
+   setStatus('Loading on-device OCR (first scan may take longer)...');
+   const w=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status==='loading language traineddata')setStatus('Loading English OCR model...')}});
+   await w.setParameters({tessedit_char_whitelist:'0123456789',tessedit_pageseg_mode:Tesseract.PSM.SINGLE_LINE});
+   worker=w;return worker;
+ })().catch(e=>{workerPromise=null;throw e});return workerPromise;
+}
+function cropFrame(){const video=$('view');if(!video.videoWidth||!video.videoHeight)throw new Error('Camera is not ready');
+  const area=$('cameraBox').getBoundingClientRect(),guide=$('guide').getBoundingClientRect();
+  const s=Math.max(area.width/video.videoWidth,area.height/video.videoHeight),drawW=video.videoWidth*s,drawH=video.videoHeight*s;
+  const offX=(drawW-area.width)/2,offY=(drawH-area.height)/2;
+  const sx=Math.max(0,(guide.left-area.left+offX)/s),sy=Math.max(0,(guide.top-area.top+offY)/s);
+  const sw=Math.min(video.videoWidth-sx,guide.width/s),sh=Math.min(video.videoHeight-sy,guide.height/s);
+  if(sw<100||sh<10)throw new Error('Move the camera closer to the number');
+  const cv=document.createElement('canvas');cv.width=Math.min(2200,Math.max(1050,Math.floor(sw*2.3)));cv.height=Math.round(cv.width*sh/sw);
+  const cx=cv.getContext('2d',{willReadFrequently:true});cx.imageSmoothingEnabled=true;cx.drawImage(video,sx,sy,sw,sh,0,0,cv.width,cv.height);return cv;
+}
+function fromImage(img){const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height;const cv=document.createElement('canvas');
+ const scale=Math.min(1.5,2200/w);cv.width=Math.round(w*scale);cv.height=Math.round(h*scale);
+ cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);return cv;
+}
+function redInkOnly(cv){const result=document.createElement('canvas');result.width=cv.width;result.height=cv.height;
+ const src=cv.getContext('2d',{willReadFrequently:true}).getImageData(0,0,cv.width,cv.height);
+ for(let i=0;i<src.data.length;i+=4){const r=src.data[i],g=src.data[i+1],b=src.data[i+2];
+   const ink=r>55&&r-g>13&&r-b>17;src.data[i]=src.data[i+1]=src.data[i+2]=ink?0:255;src.data[i+3]=255;
+ }
+ result.getContext('2d').putImageData(src,0,0);return result;
+}
+async function recognize(cv){const w=await prepareWorker();
+ let out=await w.recognize(redInkOnly(cv));let code=extractCode(out?.data?.text||'');
+ if(!code){out=await w.recognize(cv);code=extractCode(out?.data?.text||'')}
+ return {code,raw:(out?.data?.text||'').trim(),confidence:out?.data?.confidence||0};
+}
+async function processCanvas(cv,source){if(busy)return;busy=true;
+ try{setStatus('Reading number...');const r=await recognize(cv);
+   if(r.code){add(r.code,source)}else setStatus('Could not read all 7 digits. Hold steady, fill the yellow frame, and try again.','warn');
+ }catch(e){setStatus(`Scanner error: ${e.message||e}`,'warn')}finally{busy=false}
+}
+async function readNow(){if(!stream){setStatus('Open the camera first.','warn');return}if(busy)return;try{await processCanvas(cropFrame(),'Camera')}catch(e){setStatus(e.message,'warn')}}
+async function autoCycle(){if(!auto)return;
+ try{if(!busy&&stream)await processCanvas(cropFrame(),'Auto scan')}catch(e){setStatus(e.message,'warn')}
+ if(auto)scanTimeout=setTimeout(autoCycle,550)
+}
+function stopAuto(){auto=false;clearTimeout(scanTimeout);$('autoBtn').textContent='Start auto scan';$('autoBtn').classList.remove('stop')}
+function closeCamera(){stopAuto();if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('view').srcObject=null;
+ $('guide').style.display='none';$('idle').style.display='flex';$('cameraBtn').textContent='Open camera';$('snapBtn').disabled=$('flipBtn').disabled=$('autoBtn').disabled=true;}
+async function openCamera(){if(stream){closeCamera();setStatus('Camera closed.');return}
+ if(!navigator.mediaDevices?.getUserMedia){setStatus('Camera requires HTTPS in Safari/Chrome. Publish this webpage to an HTTPS site.','warn');return}
+ try{setStatus('Requesting camera permission...');const media=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:1920},height:{ideal:1080}}});
+  stream=media;$('view').srcObject=stream;await $('view').play();$('idle').style.display='none';$('guide').style.display='block';
+  $('snapBtn').disabled=$('flipBtn').disabled=$('autoBtn').disabled=false;$('cameraBtn').textContent='Close camera';setStatus('Aim at the red seven-digit number. Tap Start auto scan.');
+ }catch(e){setStatus('Could not open camera. Allow camera access in browser settings, or use “Use photo instead.” '+(e.message||''),'warn')}
+}
+$('cameraBtn').addEventListener('click',openCamera);
+$('autoBtn').addEventListener('click',async()=>{
+ if(auto){stopAuto();setStatus('Auto scan paused.');return}
+ if(!stream)return;auto=true;$('autoBtn').textContent='Pause auto scan';$('autoBtn').classList.add('stop');
+ autoCycle();
+});
+$('snapBtn').addEventListener('click',readNow);
+$('flipBtn').addEventListener('click',async()=>{const wasAuto=auto;closeCamera();facing=facing==='environment'?'user':'environment';await openCamera();if(wasAuto&&stream)$('autoBtn').click()});
+$('manualBtn').addEventListener('click',()=>{let n=$('manualInput').value.trim();if(add(n,'Manual'))$('manualInput').value=''});
+$('manualInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('manualBtn').click()});
+$('manualInput').addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,7)});
+$('baselineFile').addEventListener('change',async e=>{
+ const file=e.target.files?.[0];if(!file)return;
+ try{const content=await file.text();const codes=content.match(/(?<!\d)00\d{5}(?!\d)/g)||[];
+ let added=0,duplicates=0;for(const code of codes){if(records.some(r=>r.code===code)){duplicates++;continue}
+ records.push({code,source:'Previous ChatGPT batch',addedAt:''});added++}
+ save();render();setStatus(`Imported ${added} coupon numbers. ${duplicates} already present. ${records.length} unique total.`,'ok');
+ }catch(err){setStatus('Import failed: '+err.message,'warn')}finally{e.target.value=''}
+});
+$('photoFile').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;
+ try{const image=await createImageBitmap(file);const cv=fromImage(image);image.close?.();await processCanvas(cv,'Camera photo')}
+ catch(error){setStatus('Photo read failed: '+error.message,'warn')}finally{e.target.value=''}
+});
+function exportRows(){return records.map((r,i)=>({'#':i+1,'Coupon Number':r.code,'Campaign':CAMPAIGN,'Source':r.source,'Date Added':r.addedAt||''}))}
+$('exportBtn').addEventListener('click',()=>{
+ if(!window.XLSX){exportCSV();setStatus('Excel library was unavailable, so a CSV was saved instead.','warn');return}
+ const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(exportRows(),{header:['#','Coupon Number','Campaign','Source','Date Added']});
+ ws['!cols']=[{wch:8},{wch:19},{wch:39},{wch:26},{wch:24}];
+ for(let i=2;i<=records.length+1;i++){const c=ws['B'+i];if(c){c.t='s';c.v=records[i-2].code;c.z='@'}}
+ XLSX.utils.book_append_sheet(wb,ws,'Coupons');XLSX.writeFile(wb,'Drive_the_Dream_Coupons.xlsx');setStatus(`Exporting ${records.length} coupon numbers to Excel.`,'ok');
+});
+function exportCSV(){const cols=['#','Coupon Number','Campaign','Source','Date Added'];let lines=[cols.join(',')];
+ exportRows().forEach(r=>{lines.push(cols.map(k=>{let v=String(r[k]??'');if(k==='Coupon Number')v='="'+v+'"';return '"'+v.replace(/"/g,'""')+'"'}).join(','))});
+ const blob=new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='Drive_the_Dream_Coupons.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),2500)}
+$('csvBtn').addEventListener('click',exportCSV);
+$('copyBtn').addEventListener('click',async()=>{const text=records.map(r=>r.code).join('\n');try{await navigator.clipboard.writeText(text);setStatus(`${records.length} numbers copied to clipboard.`,'ok')}catch{setStatus('Copy is unavailable here; use CSV export.','warn')}});
+load();
+})();
+</script>
+</body>
+</html>
