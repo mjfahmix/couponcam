@@ -35,24 +35,50 @@
     .item button{min-height:28px;padding:4px 9px;font-weight:600;font-size:.8rem;background:transparent}
     .tip{color:var(--muted);font-size:.81rem;margin:9px 1px}.filelink{display:inline-block;cursor:pointer;text-align:center;border:1px solid #365673;border-radius:11px;min-height:47px;padding:10px 11px;background:#1b344b;font-weight:700;flex:1}
     #photoFile{display:none}.hide{display:none!important}footer{text-align:center;color:var(--muted);font-size:.75rem;margin-top:14px}
+    .profile-gate{min-height:100dvh;display:grid;place-items:center;padding:20px;background:var(--bg)}
+    .profile-panel{width:min(100%,470px);border:1px solid #35536d;background:var(--surface);border-radius:20px;padding:24px}
+    .profile-panel h1{margin:0 0 8px;font-size:1.7rem}
+    .profile-panel p{color:var(--muted);font-size:.89rem}
+    .profile-panel label{display:block;font-size:.85rem;margin:16px 0 7px}
+    .profile-entry{display:flex;gap:8px}.profile-entry input{flex:1;min-width:0;border:1px solid #43607b;border-radius:10px;background:#091a2b;color:white;font:inherit;padding:12px}
+    .profile-choice{width:100%;margin:5px 0;text-align:left;display:flex;justify-content:space-between;align-items:center}
+    .profile-choice small{font-size:.76rem;color:var(--muted)}
+    .profilebar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 14px;padding:10px 12px;background:var(--surface);border:1px solid #2b4258;border-radius:12px}
+    .profilebar strong{color:var(--gold)}.profilebar small{display:block;font-size:.72rem;color:var(--muted)}
+    .profilebar button{min-height:38px;font-size:.82rem;padding:7px 10px;white-space:nowrap}
     @media(min-width:650px){.camera{aspect-ratio:4 / 3;max-height:450px}.app{padding-top:23px}}
   </style>
   <script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
-<main class="app">
+<div id="profileGate" class="profile-gate">
+  <div class="profile-panel">
+    <h1>Coupon<span style="color:var(--gold)">Cam</span></h1>
+    <p>Enter your name to open your personal coupon list. Other names have separate lists on this device.</p>
+    <label for="profileName">Your name</label>
+    <div class="profile-entry">
+      <input id="profileName" autocomplete="name" maxlength="32" placeholder="MJ" aria-label="Your profile name">
+      <button id="profileEnter" class="primary">Continue</button>
+    </div>
+    <div id="profileError" class="tip" role="alert"></div>
+    <div id="profileChoices"></div>
+    <p><strong>Important:</strong> These are local browser profiles, not password-protected accounts. Data stays on this device, does not sync across phones, and can be lost if browser data is cleared. Export Excel backups.</p>
+  </div>
+</div>
+<main class="app hide" id="scannerApp">
   <header>
     <div><h1>Coupon<em>Cam</em></h1><div class="sub">Drive the Dream · Abu Sidra Mall</div></div>
     <div style="text-align:right"><div class="counter" id="total">0</div><div class="sub">unique coupons</div></div>
   </header>
+  <div class="profilebar"><div>Scanning as <strong id="activeName"></strong><small>Separate list for this browser profile</small></div><button id="profileSwitch">Switch user</button></div>
   <div class="camera" id="cameraBox">
     <video id="view" autoplay muted playsinline></video>
     <div class="idle" id="idle">Tap <strong style="margin:0 5px;color:white">Open camera</strong> to begin scanning.</div>
     <div class="guide" id="guide" style="display:none"></div>
     <div class="flash" id="flash"></div>
   </div>
-  <div id="status" class="status" role="status">Ready. Import the existing 85 coupon numbers once, then start scanning.</div>
+  <div id="status" class="status" role="status">Ready to scan coupons for your selected profile.</div>
   <div class="actions">
     <button id="cameraBtn" class="primary">Open camera</button>
     <button id="autoBtn" disabled>Start auto scan</button>
@@ -65,9 +91,9 @@
   </div>
   <div class="tip">Keep the 7-digit red number inside the yellow frame. Auto scan adds new numbers without taking or uploading photos. Use a well-lit spot and hold steady.</div>
   <section>
-    <h2>Import earlier coupons</h2>
-    <div class="lower"><label for="baselineFile" class="filelink">Import the 85-number list</label><input type="file" id="baselineFile" accept=".txt,.csv,text/plain,text/csv" style="display:none"></div>
-    <div class="tip">Use <strong>existing_coupons.txt</strong> from your download. Keep that file private; the public scanner page has no coupon numbers in its code.</div>
+    <h2>Import coupons for this user</h2>
+    <div class="lower"><label for="baselineFile" class="filelink">Import TXT / CSV list</label><input type="file" id="baselineFile" accept=".txt,.csv,text/plain,text/csv" style="display:none"></div>
+    <div class="tip">For MJ, you can import <strong>existing_coupons.txt</strong> with the previously collected 85 numbers. Only the selected user's list is changed.</div>
   </section>
   <section>
     <h2>Manual correction</h2>
@@ -85,23 +111,95 @@
     <div id="couponList" class="items"></div>
     <div class="lower" style="margin-top:12px"><button id="copyBtn">Copy numbers</button><button id="csvBtn">Export CSV</button></div>
   </section>
-  <footer>Numbers are stored on this device in this browser. OCR runs on your device. Keep an Excel backup regularly.</footer>
+  <footer>Each name has a separate list in this browser. No login, cloud storage, or cross-device sync. Anyone using this browser can select any name. OCR runs on your device. Keep an Excel backup regularly.</footer>
 </main>
 <script>
 (()=>{'use strict';
-const INITIAL_CODES=[];
-const STORAGE_KEY='couponcam_abu_sidra_20261116_v1';
+const PROFILE_KEY='couponcam_named_profiles_v2';
+const LEGACY_KEY='couponcam_abu_sidra_20261116_v1';
+const LEGACY_DONE_KEY='couponcam_legacy_imported_v2';
 const CAMPAIGN='Abu Sidra Mall - Drive the Dream';
 const $=id=>document.getElementById(id);
 const now=()=>new Date().toISOString();
-const startEntries=INITIAL_CODES.map(code=>({code,source:'Previous ChatGPT batch',addedAt:''}));
-let records=[],duplicateReads=0,stream=null,worker=null,workerPromise=null,auto=false,scanTimeout=null,busy=false,facing='environment',lastSeen='',lastSeenAt=0;
-function load(){let saved;try{saved=JSON.parse(localStorage.getItem(STORAGE_KEY))}catch{};
-  const originals=Array.isArray(saved)?saved.filter(x=>x&&/^\d{7}$/.test(x.code)):[];
-  const seen=new Set;records=[];
-  for(const r of [...originals,...startEntries])if(!seen.has(r.code)){seen.add(r.code);records.push(r)}
-  save();render();}
-function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(records))}catch(e){setStatus('Device storage unavailable. Export Excel before closing this page.',true)}}
+let profiles=Object.create(null),activeProfileKey='',records=[],duplicateReads=0,stream=null,worker=null,workerPromise=null,auto=false,scanTimeout=null,busy=false,facing='environment',lastSeen='',lastSeenAt=0;
+function cleanName(name){return String(name||'').trim().replace(/\s+/g,' ')}
+function nameKey(name){return cleanName(name).toLocaleLowerCase('en')}
+function load(){
+ try{
+  const data=JSON.parse(localStorage.getItem(PROFILE_KEY)||'{}');
+  if(data&&typeof data==='object'&&!Array.isArray(data)){
+   for(const [key,profile] of Object.entries(data)){
+    if(!profile||typeof profile.name!=='string'||!Array.isArray(profile.records))continue;
+    const seen=new Set();
+    const list=[];
+    for(const row of profile.records){
+      if(!row||typeof row.code!=='string'||!/^\d{7}$/.test(row.code)||seen.has(row.code))continue;
+      seen.add(row.code);list.push({code:row.code,source:typeof row.source==='string'?row.source:'Saved',addedAt:typeof row.addedAt==='string'?row.addedAt:''});
+    }
+    profiles[key]={name:cleanName(profile.name),records:list};
+   }
+  }
+ }catch(e){$('profileError').textContent='Could not read saved profiles from this browser.'}
+ showProfiles();
+}
+function save(){
+ if(!activeProfileKey||!profiles[activeProfileKey])return;
+ profiles[activeProfileKey].records=records;
+ try{localStorage.setItem(PROFILE_KEY,JSON.stringify(profiles))}
+ catch(e){setStatus('Storage unavailable. Export Excel now to keep your work.',true)}
+}
+function showProfiles(){
+ const area=$('profileChoices');area.textContent='';
+ const entries=Object.entries(profiles).sort((a,b)=>a[1].name.localeCompare(b[1].name));
+ if(!entries.length)return;
+ const title=document.createElement('p');title.textContent='Profiles on this device';area.appendChild(title);
+ for(const [key,profile] of entries){
+  const btn=document.createElement('button');btn.className='profile-choice';
+  const name=document.createElement('span');name.textContent=profile.name;
+  const count=document.createElement('small');count.textContent=profile.records.length+' coupons';
+  btn.append(name,count);btn.addEventListener('click',()=>openProfile(profile.name));
+  area.appendChild(btn);
+ }
+}
+function importLegacyIfNeeded(){
+ if(localStorage.getItem(LEGACY_DONE_KEY))return;
+ let older;
+ try{older=JSON.parse(localStorage.getItem(LEGACY_KEY)||'[]')}catch{return}
+ if(!Array.isArray(older)||!older.length)return;
+ if(!confirm('This browser has '+older.length+' coupons from the older scanner. Import them into '+profiles[activeProfileKey].name+'?'))return;
+ const seen=new Set(records.map(r=>r.code));
+ let count=0;
+ for(const r of older){
+  if(!r||typeof r.code!=='string'||!/^00\d{5}$/.test(r.code)||seen.has(r.code))continue;
+  records.push({code:r.code,source:r.source||'Previous scanner',addedAt:r.addedAt||''});
+  seen.add(r.code);count++;
+ }
+ try{localStorage.setItem(LEGACY_DONE_KEY,activeProfileKey)}catch{}
+ save();
+ setStatus('Imported '+count+' coupons from the previous scanner into '+profiles[activeProfileKey].name+'.','ok');
+}
+function openProfile(value){
+ const name=cleanName(value);
+ if(!name||name.length>32||!(/^[\p{L}\p{N}][\p{L}\p{N} _-]*$/u).test(name)){
+   $('profileError').textContent='Enter a name (1–32 characters; letters, numbers, spaces, - or _).';return;
+ }
+ $('profileError').textContent='';
+ const key=nameKey(name);
+ if(!Object.prototype.hasOwnProperty.call(profiles,key))profiles[key]={name,records:[]};
+ closeCamera();
+ activeProfileKey=key;records=profiles[key].records;duplicateReads=0;lastSeen='';lastSeenAt=0;
+ $('activeName').textContent=profiles[key].name;
+ $('profileGate').classList.add('hide');$('scannerApp').classList.remove('hide');
+ save();render();setStatus('Scanning as '+profiles[key].name+'. Only this user’s coupons will be saved and exported.');
+ importLegacyIfNeeded();
+ window.scrollTo(0,0);
+}
+function switchProfile(){
+ closeCamera();save();activeProfileKey='';records=[];
+ $('scannerApp').classList.add('hide');$('profileGate').classList.remove('hide');
+ $('profileName').value='';$('profileError').textContent='';showProfiles();
+ window.scrollTo(0,0);
+}
 function setStatus(msg,kind=''){const s=$('status');s.textContent=msg;s.className='status '+(kind===true?'warn':kind||'')}
 function render(){const newer=records.filter(x=>x.source!=='Previous ChatGPT batch');
   $('total').textContent=records.length;$('previousCount').textContent=records.length-newer.length;$('newCount').textContent=newer.length;$('dupeCount').textContent=duplicateReads;
@@ -118,6 +216,7 @@ function render(){const newer=records.filter(x=>x.source!=='Previous ChatGPT bat
 }
 function beep(){try{const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const a=new C(),o=a.createOscillator(),g=a.createGain();o.frequency.value=880;o.type='sine';g.gain.value=.045;o.connect(g);g.connect(a.destination);o.start();o.stop(a.currentTime+.11);o.onended=()=>a.close()}catch{}}
 function add(code,source='Auto scan'){
+ if(!activeProfileKey)return false;
  if(!/^00\d{5}$/.test(code)){setStatus('Expected a seven-digit coupon beginning with 00. Use manual correction if needed.','warn');return false}
  if(records.some(r=>r.code===code)){
    const time=Date.now();if(lastSeen!==code||time-lastSeenAt>5000){duplicateReads++;setStatus(`${code} already exists — not added again.`,'warn');render()}
@@ -166,8 +265,9 @@ async function recognize(cv){const w=await prepareWorker();
  if(!code){out=await w.recognize(cv);code=extractCode(out?.data?.text||'')}
  return {code,raw:(out?.data?.text||'').trim(),confidence:out?.data?.confidence||0};
 }
-async function processCanvas(cv,source){if(busy)return;busy=true;
+async function processCanvas(cv,source){if(busy||!activeProfileKey)return;busy=true;const scannedProfile=activeProfileKey;
  try{setStatus('Reading number...');const r=await recognize(cv);
+   if(scannedProfile!==activeProfileKey)return;
    if(r.code){add(r.code,source)}else setStatus('Could not read all 7 digits. Hold steady, fill the yellow frame, and try again.','warn');
  }catch(e){setStatus(`Scanner error: ${e.message||e}`,'warn')}finally{busy=false}
 }
@@ -179,13 +279,16 @@ async function autoCycle(){if(!auto)return;
 function stopAuto(){auto=false;clearTimeout(scanTimeout);$('autoBtn').textContent='Start auto scan';$('autoBtn').classList.remove('stop')}
 function closeCamera(){stopAuto();if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;$('view').srcObject=null;
  $('guide').style.display='none';$('idle').style.display='flex';$('cameraBtn').textContent='Open camera';$('snapBtn').disabled=$('flipBtn').disabled=$('autoBtn').disabled=true;}
-async function openCamera(){if(stream){closeCamera();setStatus('Camera closed.');return}
+async function openCamera(){if(!activeProfileKey)return;if(stream){closeCamera();setStatus('Camera closed.');return}
  if(!navigator.mediaDevices?.getUserMedia){setStatus('Camera requires HTTPS in Safari/Chrome. Publish this webpage to an HTTPS site.','warn');return}
  try{setStatus('Requesting camera permission...');const media=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:1920},height:{ideal:1080}}});
   stream=media;$('view').srcObject=stream;await $('view').play();$('idle').style.display='none';$('guide').style.display='block';
   $('snapBtn').disabled=$('flipBtn').disabled=$('autoBtn').disabled=false;$('cameraBtn').textContent='Close camera';setStatus('Aim at the red seven-digit number. Tap Start auto scan.');
  }catch(e){setStatus('Could not open camera. Allow camera access in browser settings, or use “Use photo instead.” '+(e.message||''),'warn')}
 }
+$('profileEnter').addEventListener('click',() => openProfile($('profileName').value));
+$('profileName').addEventListener('keydown',e=>{if(e.key==='Enter')openProfile(e.target.value)});
+$('profileSwitch').addEventListener('click',switchProfile);
 $('cameraBtn').addEventListener('click',openCamera);
 $('autoBtn').addEventListener('click',async()=>{
  if(auto){stopAuto();setStatus('Auto scan paused.');return}
@@ -209,17 +312,18 @@ $('photoFile').addEventListener('change',async e=>{const file=e.target.files?.[0
  try{const image=await createImageBitmap(file);const cv=fromImage(image);image.close?.();await processCanvas(cv,'Camera photo')}
  catch(error){setStatus('Photo read failed: '+error.message,'warn')}finally{e.target.value=''}
 });
-function exportRows(){return records.map((r,i)=>({'#':i+1,'Coupon Number':r.code,'Campaign':CAMPAIGN,'Source':r.source,'Date Added':r.addedAt||''}))}
+function exportRows(){return records.map((r,i)=>({'#':i+1,'User':profiles[activeProfileKey]?.name||'','Coupon Number':r.code,'Campaign':CAMPAIGN,'Source':r.source,'Date Added':r.addedAt||''}))}
+function exportFilename(ext){const user=(profiles[activeProfileKey]?.name||'User').replace(/[^a-z0-9_-]+/gi,'_');return 'Drive_the_Dream_'+user+'_Coupons.'+ext}
 $('exportBtn').addEventListener('click',()=>{
  if(!window.XLSX){exportCSV();setStatus('Excel library was unavailable, so a CSV was saved instead.','warn');return}
- const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(exportRows(),{header:['#','Coupon Number','Campaign','Source','Date Added']});
- ws['!cols']=[{wch:8},{wch:19},{wch:39},{wch:26},{wch:24}];
- for(let i=2;i<=records.length+1;i++){const c=ws['B'+i];if(c){c.t='s';c.v=records[i-2].code;c.z='@'}}
- XLSX.utils.book_append_sheet(wb,ws,'Coupons');XLSX.writeFile(wb,'Drive_the_Dream_Coupons.xlsx');setStatus(`Exporting ${records.length} coupon numbers to Excel.`,'ok');
+ const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(exportRows(),{header:['#','User','Coupon Number','Campaign','Source','Date Added']});
+ ws['!cols']=[{wch:8},{wch:20},{wch:19},{wch:39},{wch:26},{wch:24}];
+ for(let i=2;i<=records.length+1;i++){const c=ws['C'+i];if(c){c.t='s';c.v=records[i-2].code;c.z='@'}}
+ XLSX.utils.book_append_sheet(wb,ws,'Coupons');XLSX.writeFile(wb,exportFilename('xlsx'));setStatus(`Exporting ${records.length} coupon numbers to Excel.`,'ok');
 });
-function exportCSV(){const cols=['#','Coupon Number','Campaign','Source','Date Added'];let lines=[cols.join(',')];
+function exportCSV(){const cols=['#','User','Coupon Number','Campaign','Source','Date Added'];let lines=[cols.join(',')];
  exportRows().forEach(r=>{lines.push(cols.map(k=>{let v=String(r[k]??'');if(k==='Coupon Number')v='="'+v+'"';return '"'+v.replace(/"/g,'""')+'"'}).join(','))});
- const blob=new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='Drive_the_Dream_Coupons.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),2500)}
+ const blob=new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=exportFilename('csv');link.click();setTimeout(()=>URL.revokeObjectURL(url),2500)}
 $('csvBtn').addEventListener('click',exportCSV);
 $('copyBtn').addEventListener('click',async()=>{const text=records.map(r=>r.code).join('\n');try{await navigator.clipboard.writeText(text);setStatus(`${records.length} numbers copied to clipboard.`,'ok')}catch{setStatus('Copy is unavailable here; use CSV export.','warn')}});
 load();
